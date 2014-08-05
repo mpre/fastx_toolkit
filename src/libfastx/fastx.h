@@ -25,6 +25,10 @@ extern "C" {
 /* for PATH_MAX */
 #include <limits.h>
 
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
+
 #define MIN_QUALITY_VALUE (-15)
 #define MAX_QUALITY_VALUE 93
 #define QUALITY_VALUES_RANGE (MAX_QUALITY_VALUE-MIN_QUALITY_VALUE)
@@ -112,7 +116,11 @@ typedef struct
 	size_t  num_input_reads;
 	size_t  num_output_reads;
 
+#ifdef HAVE_LIBZ
+	gzFile* input;
+#else
 	FILE*	input;
+#endif
 	FILE*	output;
 } FASTX ;
 

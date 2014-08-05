@@ -28,6 +28,10 @@
 #include "chomp.h"
 #include "fastx.h"
 
+#ifdef HAVE_LIBZ
+#include <zlib.h>
+#endif
+
 /*
 	valid_sequence_string - 
 		check validity of a given sequence string.
@@ -87,8 +91,13 @@ static void detect_input_format(FASTX *pFASTX)
 {
 	//Get the first character in the file,
 	//and put it right back
+#ifdef HAVE_LIBZ
+	int c= gzgetc(pFASTX->input);
+	gzungetc(c, pFASTX->input);
+#else
 	int c = fgetc(pFASTX->input);
 	ungetc(c, pFASTX->input);
+#endif
 	
 	switch(c) {
 	case '>':	/* FASTA file */
@@ -178,9 +187,17 @@ void fastx_init_reader(FASTX *pFASTX, const char* filename,
 	memset(pFASTX, 0, sizeof(FASTX));
 
 	if (strncmp(filename,"-",1)==0) {
+#ifdef HAVE_LIBZ
+		pFASTX->input = gzdopen(fileno(stdin), "r");
+#else
 		pFASTX->input = stdin;	
+#endif
 	} else {
+#ifdef HAVE_LIBZ
+		pFASTX->input = gzopen(filename, "r");
+#else
 		pFASTX->input = fopen(filename, "r");
+#endif
 		if (pFASTX->input==NULL)
 			err(1, "failed to open input file '%s'", filename);
 	}
@@ -321,8 +338,13 @@ int fastx_read_next_record(FASTX *pFASTX)
 		errx(1,"Internal error: pFASTX==NULL (%s:%d)", __FILE__,__LINE__);
 
 	pFASTX->input_line_number++;
+#ifdef HAVE_LIBZ
+  if (gzgets(pFASTX->input, pFASTX->dummy_read_id_buffer, MAX_SEQ_LINE_LENGTH) == NULL)
+    return 0;
+#else
 	if (fgets(pFASTX->dummy_read_id_buffer, MAX_SEQ_LINE_LENGTH, pFASTX->input) == NULL)
 		return 0; //assume end-of-file, if we couldn't read the first line of the foursome
+#endif
 
 	chomp(pFASTX->name);
 
@@ -351,9 +373,15 @@ int fastx_read_next_record(FASTX *pFASTX)
 	//for the rest of the lines, if they don't appear, it's an error
 	pFASTX->input_line_number++;
 
+#ifdef HAVE_LIBZ
+	if (gzgets(pFASTX->input, pFASTX->nucleotides, MAX_SEQ_LINE_LENGTH) == NULL)
+		errx(1,"Failed to read complete record, missing 2nd line (nucleotides), on line %lld\n",
+			pFASTX->input_line_number);
+#else
 	if (fgets(pFASTX->nucleotides,  MAX_SEQ_LINE_LENGTH, pFASTX->input) == NULL) 
 		errx(1,"Failed to read complete record, missing 2nd line (nucleotides), on line %lld\n",
 			pFASTX->input_line_number);
+#endif
 
 	chomp(pFASTX->nucleotides);
 
@@ -367,14 +395,26 @@ int fastx_read_next_record(FASTX *pFASTX)
 	
 	if (pFASTX->read_fastq) {
 		pFASTX->input_line_number++;
+#ifdef HAVE_LIBZ
+		if (gzgets(pFASTX->input, pFASTX->dummy_read_id2_buffer, MAX_SEQ_LINE_LENGTH) == NULL)
+			errx(1,"Failed to read complete record, missing 3rd line (name-2), on line %lld\n",
+				pFASTX->input_line_number);
+#else
 		if (fgets(pFASTX->dummy_read_id2_buffer,  MAX_SEQ_LINE_LENGTH, pFASTX->input) == NULL) 
 			errx(1,"Failed to read complete record, missing 3rd line (name-2), on line %lld\n",
 				pFASTX->input_line_number);
+#endif
 		
 		pFASTX->input_line_number++;
+#ifdef HAVE_LIBZ
+		if (gzgets(pFASTX->input, temp_qual, sizeof(temp_qual)) == NULL)
+			errx(1,"Failed to read complete record, missing 4th line (quality), on line %lld\n",
+				pFASTX->input_line_number);
+#else
 		if (fgets(temp_qual, sizeof(temp_qual), pFASTX->input) == NULL)
 			errx(1,"Failed to read complete record, missing 4th line (quality), on line %lld\n",
 				pFASTX->input_line_number);
+#endif
 
 		chomp(pFASTX->name2);
 		chomp(temp_qual);
